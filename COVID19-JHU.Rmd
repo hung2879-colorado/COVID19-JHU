@@ -1,0 +1,587 @@
+---
+title: "Week 5 Peer Review - Data Science As A Field"
+author: "Hung Nguyen"
+date: "2023-04-25"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# COVID-19 Data Analysis
+
+## I) Data Import
+
+<br>
+**I imported the COVID-19 data from Github website of John Hopkins University. There are 5 data files available from the source.  **
+<br>  
+  
+```{r echo=TRUE}
+
+library(tidyverse)
+library(lubridate)
+library(scales)
+
+url = 'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/'
+
+url_lookup = 'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv' 
+
+file_names = c("time_series_covid19_confirmed_US.csv",
+"time_series_covid19_confirmed_global.csv",
+"time_series_covid19_deaths_US.csv",
+"time_series_covid19_deaths_global.csv")
+
+urls = str_c(url,file_names)
+
+```  
+
+<br>  
+**I'm going to read the csv files and save them to appropriate variables.**  
+<br>  
+
+```{r echo=TRUE}
+
+us_cases = read_csv(urls[1])
+global_cases = read_csv(urls[2])
+us_deaths = read_csv(urls[3])
+global_deaths = read_csv(urls[4])
+uid = read_csv(url_lookup)
+
+```  
+
+<br>
+<br>
+**Let's take a look at our global cases data first.  **  
+<br>  
+<br>  
+
+```{r echo = TRUE}
+
+global_cases
+
+```    
+
+<br>  
+**I can see these two columns Lat and Long are not necessary for my analysis, so I'll remove them. Also I can see the dates are columns so I'll pivot the date into rows under a column "date", and the values of each date into rows under column "cases". I also will filter the data where cases > 0. I can see also the date column type is character type so I will change it to date type. I will also change the names of columns Province/State and Country/Region to appropriate names that matched other data.  **  
+<br>  
+
+
+```{r echo = TRUE}
+
+global_cases = global_cases %>% 
+  pivot_longer(col=-c('Province/State','Country/Region',Lat,Long), 
+               names_to = 'date', values_to = 'cases') %>% 
+  select(-c(Lat,Long)) %>% filter(cases > 0) %>% mutate(date = mdy(date)) %>% 
+  rename(Province_State = `Province/State`, Country_Region = `Country/Region`)
+
+```  
+
+<br>  
+<br>  
+**Now I want to look at the global deaths data.  **  
+<br>  
+
+```{r echo = TRUE}
+
+global_deaths
+
+```  
+
+<br>  
+<br>  
+**I can see global deaths have the same type of data as global cases. Therefore, I have applied the same data transformation for global deaths as I did for global cases.  **
+<br>  
+<br>
+
+```{r echo = TRUE}
+
+global_deaths = global_deaths %>% 
+  pivot_longer(col=-c('Province/State','Country/Region',Lat,Long), 
+               names_to = 'date', values_to = 'deaths') %>% 
+  select(-c(Lat,Long)) %>% filter(deaths > 0) %>% mutate(date=mdy(date)) %>% 
+  rename(Province_State = `Province/State`, Country_Region = `Country/Region`)
+
+```  
+
+<br>
+<br>  
+<br>  
+**After global data is transformed well, I want to look at the us cases data.  **
+<br>
+<br>
+  
+```{r echo = TRUE}
+
+us_cases
+
+```  
+
+<br>  
+<br>  
+**I can see the columns UID, iso2, iso3, code3, FIPS, Lat, Long_ are not necessary for my analysis, so I'll drop them form the table. I will pivot the date columns into rows and save their values as row values under a new column named date. I'll also change the date column into date type instead of character type, and filter the cases > 0.  **
+<br>  
+<br>
+  
+```{r echo = TRUE}
+
+us_cases = us_cases %>% 
+  pivot_longer(-c(UID:Combined_Key),
+               names_to = 'date', values_to = 'cases') %>% 
+  select(Admin2:cases) %>% select(-c(Lat,Long_)) %>% 
+  mutate(date=mdy(date)) %>% filter(cases >0)
+
+```  
+  
+<br>  
+**I'll do the same thing for the us deaths data by apply the same transformation as I do for my us cases.  **
+<br>  
+<br>
+  
+```{r echo = TRUE}
+
+us_deaths = us_deaths %>% 
+  pivot_longer(-c(UID:Population),
+               names_to = 'date', values_to = 'deaths') %>% 
+  select(Admin2:deaths) %>% select(-c(Lat,Long_)) %>% 
+  mutate(date=mdy(date)) %>% filter(deaths >0)
+
+```  
+
+<br>  
+<br>
+<br>
+<br>
+
+
+## II) Data Analysis
+
+<br>
+**I can see global_cases does not have the population data so I will join in with the uid table which contains the population. After that I join the global_cases with global_deaths to create a variable called global and filter the data with cases, deaths > 0.**
+<br>
+
+```{r echo=TRUE}
+
+global_cases = global_cases %>% 
+  left_join(uid, by=c('Province_State','Country_Region')) %>% 
+  select(Province_State,Country_Region,date,cases,Population)
+
+global = global_cases %>% full_join(global_deaths) %>% 
+  filter(deaths > 0) %>% filter(cases>0)
+
+```
+
+<br>
+<br>
+**I want to see the number of global cases and global deaths over time so I will have to calculate number of cases and number of deaths by each date in all countries. I create a new variable called global_by_date. I group the cases and deaths by date, sum all the cases and the deaths for all countries.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+global_by_date = global %>% 
+  group_by(date) %>% 
+  summarize(cases=sum(cases),deaths=sum(deaths)) %>% 
+  ungroup()
+
+global_by_date
+
+```
+
+<br>
+<br>
+**I also join the us cases with us deaths to create a variable called us and filter the data with Population > 0.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+us = us_cases %>% 
+  full_join(us_deaths) %>% 
+  filter(Population > 0) %>% 
+  filter(cases >0) %>% 
+  filter(deaths > 0)
+
+```
+
+<br>
+<br>
+**I want to see the number of us cases and us deaths over time so I will have to calculate number of cases and number of deaths by each date in all country regions. I create a new variable called us_by_date. I group the cases, deaths by date, sum all the cases and deaths for all country regions.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+us_by_date = us %>% group_by(date) %>% 
+  summarize(cases = sum(cases), deaths = sum(deaths)) %>% 
+  ungroup()
+
+us_by_date
+
+```
+
+
+<br>
+<br>
+<br>
+**Now let's plot the number of cases over time for global cases.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+x_axis = min(global_by_date$date):max(global_by_date$date)
+ggplot(global_by_date, aes(x=date, y = cases)) +
+  ggtitle("Global Cases") +
+  geom_line(color = "blue") + 
+  scale_x_date(date_labels = "%b %Y") + 
+  scale_y_continuous(labels=comma)
+
+```
+
+<br>
+<br>
+**And let's plot the number of deaths over time for global deaths.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+x_axis = min(global_by_date$date):max(global_by_date$date)
+ggplot(global_by_date, aes(x=date, y = deaths)) + 
+   ggtitle("Global Deaths") +
+  geom_line(color = "red") + 
+  scale_x_date(date_labels = "%b %Y") + 
+  scale_y_continuous(labels = comma)
+
+```
+
+<br>
+<br>
+**We can try to see the relationship between cases versus deaths by plotting the number of deaths vs number of cases for global cases and deaths.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+ggplot(global_by_date,aes(x=cases,y = deaths)) + 
+   ggtitle("Global Cases vs. Deaths") +
+  geom_line(color="turquoise4") + 
+  scale_x_continuous(labels=comma) + 
+  scale_y_continuous(labels = comma)
+
+```
+
+<br>
+<br>
+**Looking at the plot, we might find some relationship between cases and deaths. The curve looks like a concave down parabola, a quadratic relationship between cases and deaths.**
+
+**Now let's plot the number of cases over time for us cases.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+x_axis = min(us_by_date$date):max(us_by_date$date)
+ggplot(us_by_date, aes(x=date, y = cases)) + 
+   ggtitle("U.S Cases") +
+  geom_line(color = "blue") + 
+  scale_x_date(date_labels = "%b %Y") + 
+  scale_y_continuous(labels=comma)
+
+```
+
+<br>
+<br>
+**And let's plot the number of deaths over time for us deaths.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+x_axis = min(us_by_date$date):max(us_by_date$date)
+ggplot(us_by_date, aes(x=date, y = deaths)) + 
+   ggtitle("U.S Deaths") +
+  geom_line(color = "red") + 
+  scale_x_date(date_labels = "%b %Y")+ 
+  scale_y_continuous(labels = comma)
+
+```
+
+<br>
+<br>
+**I would like to find out the relationship between cases versus deaths by plotting the number of deaths vs number of cases for us cases and deaths. **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+ggplot(us_by_date,aes(x=cases,y = deaths)) + 
+   ggtitle("U.S Cases vs. Deaths") +
+  geom_line(color="turquoise4")+ 
+  scale_x_continuous(labels=comma) + 
+  scale_y_continuous(labels = comma)
+
+```
+
+<br>
+<br>
+**Looking at the plot, we might find some relationship between cases and deaths. The curve looks like a concave down parabola, a quadratic relationship between cases and deaths.**
+
+**I want to see the number of cases and deaths by country. However, I cannot add the number of cases or the number of deaths because the cases and deaths are updated over time. So it perhaps makes sense to take the maximum number of cases as well as the maximum number of deaths for each country. **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+global_by_country = global %>% 
+  group_by(Country_Region) %>% 
+  summarize(Population = mean(Population), 
+            max_cases = max(cases), max_deaths = max(deaths)) %>% 
+  ungroup()
+
+global_by_country
+
+```  
+
+<br>
+<br>
+**From global_by_country, I can calculate the mortality rate which is the maximum deaths/maximum cases, and I can calculate the death rate which is the max number of deaths/population of the country, as well as the infection rate which is the max number of cases/population of the country. **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+global_by_country_rate = global_by_country %>% 
+  group_by(Country_Region) %>% 
+  summarize(infection_rate = max_cases*100/Population, 
+            death_rate = max_deaths*100/Population, 
+            mortality_rate = max_deaths*100/max_cases)
+
+global_by_country_rate
+
+```
+
+<br>
+<br>
+**Now let's plot the infection rate by country.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+barplot(global_by_country_rate$infection_rate,
+main = "Infection Rate By Country",
+xlab = "Country",
+ylab = "Infection Rate(Percentage)",
+names.arg = global_by_country_rate$Country_Region,
+col = "darkred",xaxt ='n') 
+
+```
+
+<br>
+<br>
+**We can observe that there are countries that has more than 100% of infection rate, which means the number of cases of those countries is greater than their population. There is nothing wrong about the calculation here. The simple explanation is that there are a lot of people in those countries who have gotten infected more than one. Let's take a look at those countries.  **
+<br>
+<br>
+
+```{r echo = TRUE}
+
+global_by_country_rate %>% filter(infection_rate >= 100)
+
+```
+
+<br>
+<br>
+**Interestingly, we can see 5 countries including Australia, Denmark, France, Netherlands, United Kingdom are the one that have very high infection rate. The reasons could be that those countries did not apply the quarantine procedure thoroughly. So in France or United Kingdom for example, a person could be reported to get infected 3 to 5 times.  **
+
+**Then let's plot the death rate by country. **
+<br>
+<br>
+
+```{r echo = TRUE}
+barplot(global_by_country_rate$death_rate,
+main = "Death Rate By Country",
+xlab = "Country",
+ylab = "Death Rate(Percentage)",
+names.arg = global_by_country_rate$Country_Region,
+col = "darkred",xaxt='n') 
+```
+
+<br>
+<br>
+**There are two countries that have a high death rate which is greater than 2%. Let's list those countries.**
+<br>
+<br>
+
+```{r echo = TRUE}
+
+global_by_country_rate %>% filter(death_rate > 2)
+
+```
+
+<br>
+<br>
+**We can see France and United Kingdom are the countries that have such high death rate. Notably, these two countries also have the first and second highest infection rate.**
+
+**Let's plot out the mortality rate per country. **
+<br>
+<br>
+
+```{r echo=TRUE}
+barplot(global_by_country_rate$mortality_rate,
+main = "Mortality Rate By Country",
+xlab = "Country",
+ylab = "Mortality Rate(Percentage)",
+names.arg = global_by_country_rate$Country_Region,
+col = "darkred",xaxt ='n') 
+```
+
+<br>
+<br>
+**There is a country with a very high mortality rate, roughly over 600%, which means the number of average deaths is six times the number of average cases. This number seems impossible. Let's find out which country that is.  **
+<br>
+<br>
+
+```{r echo=TRUE}
+
+global_by_country_rate %>% filter(mortality_rate > 100)
+
+```
+
+<br>
+<br>
+**Very interestingly, the country that has such an impossible mortality rate is North Korea. However, considering North Korea is an isolated country from the rest of the world, the number of cases or the number of deaths was reported falsely. It is more likely that the number of cases was not reported correctly here. So let's drop North Korea from our data because of its misreporting.  **
+<br>
+<br>
+
+```{r echo= TRUE}
+
+global = global %>% filter(Country_Region != 'Korea, North')
+
+global_by_date = global %>% 
+  group_by(date) %>% 
+  summarize(cases=sum(cases),deaths=sum(deaths)) %>% ungroup()
+
+global_by_country_rate = global_by_country_rate %>% 
+  filter(mortality_rate < 100)
+
+```
+
+<br>
+<br>
+**Let's draw the plot of mortality rate again after dropping North Korea.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+barplot(global_by_country_rate$mortality_rate,
+        main = "Mortality Rate By Country", 
+        xlab = "Country",
+        ylab = "Mortality Rate(Percentage)",
+        names.arg = global_by_country_rate$Country_Region,
+        col = "darkred",xaxt ='n')
+```
+
+<br>
+<br>
+**I can see two country that has mortality rate over 10%. Let's check them out.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+global_by_country_rate %>% filter(mortality_rate > 10)
+
+```
+
+<br>
+<br>
+**I can see MS Zaandam has no infection rate and death rate. Actually Ms Zaandam is the name of a cruise ship, not even a country or region of a country and has no data. So let's drop MS Zaandam from our data. **
+<br>
+<br>
+
+```{r echo=TRUE}
+
+global = global %>% filter(Country_Region != 'MS Zaandam')
+
+global_by_date = global %>% 
+  group_by(date) %>% 
+  summarize(cases=sum(cases),
+            deaths=sum(deaths)) %>% 
+  ungroup()
+
+global_by_country_rate = global_by_country_rate %>% filter(Country_Region != 'MS Zaandam')
+
+```
+
+<br>
+<br>
+**There are a few countries that have quite high mortality rate which is greater than 5%. This is the list of those countries.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+global_by_country_rate %>% filter(mortality_rate >5)
+
+```
+
+<br>
+<br>
+**3 countries on top of the observed case-fatality rate are Sudan, Syria, and Yemen. Interestingly, all of them have very high mortality rate even though the infection rate and death rate are super low.**
+<br>
+<br>
+
+## III) Model Analysis
+
+<br>
+**Because the relationship for death versus cases for global looks like a concave down parabolic curve, we can implement a polynomial model of degree 2 for the relationship.**
+<br>
+<br>
+```{r echo=TRUE}
+
+model = lm(deaths ~ cases + I(cases^2), data = global_by_date)
+summary(model)
+
+```
+
+<br>
+<br>
+**The model seems like a very good fit since the Adjusted R-squared is 0.99 and all the coefficients are statically significant.**
+
+**I also apply the model regression for the relationship between deaths and cases of US.**
+<br>
+<br>
+
+```{r echo=TRUE}
+
+model = lm(deaths ~ cases + I(cases^2), data = us_by_date)
+
+summary(model)
+
+```
+
+<br>
+<br>
+**Again, the second model also is a good fit because we have very high Adjusted R-squared = 0.9952 and all the coefficients are statically significant.**
+
+**The two model provide reasonable evidence that the number of deaths and cases are linearly related. Meaning that, as the number of cases increase, the number of deaths also seem to increase but at a much slower rate; and as the number of cases decreases, the number of deaths also decreases at a slower rate.**
+<br>
+<br>
+
+## IV) Conclusion & Bias
+
+<br>
+**This analysis took information provided by the University of John Hopkins regarding COVID-19 cases and deaths globally and well as U.S locally to create a better understanding of the pandemic by comparing infection rate, death rate, mortality rate with countries. The data shows that countries with high infection rate also have high death rate. Furthermore a misreport of North Korea can be found by examined the mortality rate of each country. **
+
+**As we looked into more details, we could see a relationship between the number of cases and the number of deaths. It is a negative polynomial model of degree 2 which has statically significant coefficients.**
+
+**This study however has some limitation as well as bias:**
+**- Potential bias from self-reporting of COVID-19 exposure by participants.**
+**- Misreporting by participants.**
+**- The data was collected by John Hopkins University but we do not know how these information was collected. It could affect the number of cases and deaths.**
+**- Short time frame of study.**
